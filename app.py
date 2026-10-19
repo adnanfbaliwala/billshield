@@ -162,8 +162,7 @@ with gr.Blocks(title="BillShield") as app:
 
     found = gr.Markdown(label="3. What we found")
     contacts = gr.Markdown(label="4. Who to contact")
-    msg = gr.Textbox(label="5. Your complaint", lines=10,
-                     interactive=True, show_copy_button=True)
+    msg = gr.Textbox(label="5. Your complaint", lines=10, interactive=True)
 
     btn.click(check_bill, [bill, complaint], [found, contacts, msg])
 

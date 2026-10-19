@@ -27,6 +27,9 @@ Return ONLY JSON in this exact shape:
 
 RULES
 Copy every number exactly as printed. Never calculate anything.
+"amount" is the rupee figure in the amount column, never the rate
+per unit. Put the rate per unit in "rate" and the number of units
+in "units".
 Credits, discounts and rebates are NEGATIVE numbers.
 "charges" holds only the lines that make up the current month's total.
 Late fees, interest and adjustments shown separately go in

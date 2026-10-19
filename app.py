@@ -1,35 +1,111 @@
 import os
+import json
 import gradio as gr
 from pypdf import PdfReader
+from groq import Groq
+
+client = Groq(api_key=os.environ["GROQ_API_KEY"])
+
+INSTRUCTIONS = """You read utility and telecom bills.
+Return ONLY JSON in this exact shape:
+
+{
+  "company": "name printed on the bill",
+  "bill_date": "the bill month or date",
+  "current_total": number,
+  "previous_unpaid": number,
+  "amount_payable": number,
+  "charges": [
+    {"label": "name of charge as printed", "amount": number,
+     "units": number or null, "rate": number or null}
+  ],
+  "contacts": [
+    {"name": "what the bill calls it", "email": "address"}
+  ]
+}
+
+Copy every number exactly as printed. Never calculate anything.
+If a value is not on the bill, use null."""
+
+
+def read_pdf(path):
+    reader = PdfReader(path)
+    text = ""
+    for page in reader.pages:
+        text = text + (page.extract_text() or "")
+    return text
+
+
+def ask_groq(bill_text):
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": INSTRUCTIONS},
+            {"role": "user", "content": bill_text[:12000]},
+        ],
+    )
+    return json.loads(response.choices[0].message.content)
+
 
 def check_bill(file, complaint):
     if file is None:
         return "Please upload a PDF bill first.", "", ""
 
-    reader = PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        text = text + (page.extract_text() or "")
-
+    text = read_pdf(file)
     if text.strip() == "":
         return "This PDF has no readable text. It may be a scan.", "", ""
 
-    found = "Read " + str(len(reader.pages)) + " pages.\n\n" + text[:3000]
-    return found, "", ""
+    data = ask_groq(text)
+
+    lines = ["### " + str(data.get("company", "Your bill")), ""]
+    lines.append("| Charge | Amount |")
+    lines.append("|---|---|")
+
+    total_of_lines = 0
+    for charge in data.get("charges", []):
+        amount = charge.get("amount") or 0
+        total_of_lines = total_of_lines + amount
+        lines.append("| " + str(charge.get("label")) + " | " + str(amount) + " |")
+
+    current = data.get("current_total") or 0
+    previous = data.get("previous_unpaid") or 0
+    payable = data.get("amount_payable") or 0
+
+    lines.append("")
+    lines.append("**Check 1 — do the charges add up to the stated total?**")
+    lines.append("Charges add to " + str(round(total_of_lines, 2))
+                 + ". Bill says " + str(current) + ".")
+    if abs(total_of_lines - current) < 1:
+        lines.append("Correct.")
+    else:
+        lines.append("These do not match.")
+
+    lines.append("")
+    lines.append("**Check 2 — this month plus what you owed before**")
+    lines.append(str(current) + " + " + str(previous)
+                 + " = " + str(round(current + previous, 2))
+                 + ". Bill asks for " + str(payable) + ".")
+    if abs((current + previous) - payable) < 1:
+        lines.append("Correct.")
+    else:
+        lines.append("These do not match.")
+
+    contact_lines = ["### Who to contact", ""]
+    for c in data.get("contacts", []):
+        contact_lines.append("- **" + str(c.get("name")) + "** — " + str(c.get("email")))
+
+    return "\n".join(lines), "\n".join(contact_lines), ""
+
 
 with gr.Blocks(title="BillShield") as app:
     gr.Markdown("# BillShield\nFind out what your bill actually says")
 
-    bill = gr.File(
-        label="1. Upload your bill (PDF only)",
-        file_types=[".pdf"],
-        type="filepath",
-    )
-    complaint = gr.Textbox(
-        label="2. What's bothering you about it?",
-        placeholder="Feels too high. I live alone, no AC.",
-        lines=3,
-    )
+    bill = gr.File(label="1. Upload your bill (PDF only)",
+                   file_types=[".pdf"], type="filepath")
+    complaint = gr.Textbox(label="2. What's bothering you about it?",
+                           placeholder="Feels too high. I live alone, no AC.",
+                           lines=3)
     btn = gr.Button("Check my bill", variant="primary")
 
     found = gr.Markdown(label="3. What we found")

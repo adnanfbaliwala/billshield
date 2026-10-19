@@ -23,4 +23,4 @@ with gr.Blocks(title="BillShield") as app:
 
     btn.click(check_bill, [bill, complaint], [found, contacts, msg])
 
-app.launch()
+app.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))

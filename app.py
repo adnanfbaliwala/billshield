@@ -12,19 +12,28 @@ Return ONLY JSON in this exact shape:
 {
   "company": "name printed on the bill",
   "bill_date": "the bill month or date",
-  "current_total": number,
-  "previous_unpaid": number,
-  "amount_payable": number,
   "charges": [
     {"label": "name of charge as printed", "amount": number,
      "units": number or null, "rate": number or null}
   ],
+  "current_total": number,
+  "other_charges": number,
+  "previous_unpaid": number,
+  "amount_payable": number,
   "contacts": [
     {"name": "what the bill calls it", "email": "address"}
   ]
 }
 
+RULES
 Copy every number exactly as printed. Never calculate anything.
+Credits, discounts and rebates are NEGATIVE numbers.
+"charges" holds only the lines that make up the current month's total.
+Late fees, interest and adjustments shown separately go in
+"other_charges" as a single number, 0 if there are none.
+"contacts" holds only the company's own helpline, grievance,
+consumer forum or ombudsman addresses. Never the customer's own
+email. Never an address containing asterisks.
 If a value is not on the bill, use null."""
 
 
@@ -69,11 +78,12 @@ def check_bill(file, complaint):
         lines.append("| " + str(charge.get("label")) + " | " + str(amount) + " |")
 
     current = data.get("current_total") or 0
+    other = data.get("other_charges") or 0
     previous = data.get("previous_unpaid") or 0
     payable = data.get("amount_payable") or 0
 
     lines.append("")
-    lines.append("**Check 1 — do the charges add up to the stated total?**")
+    lines.append("**Check 1 — do the charges add up to the month's total?**")
     lines.append("Charges add to " + str(round(total_of_lines, 2))
                  + ". Bill says " + str(current) + ".")
     if abs(total_of_lines - current) < 1:
@@ -82,18 +92,21 @@ def check_bill(file, complaint):
         lines.append("These do not match.")
 
     lines.append("")
-    lines.append("**Check 2 — this month plus what you owed before**")
-    lines.append(str(current) + " + " + str(previous)
-                 + " = " + str(round(current + previous, 2))
+    lines.append("**Check 2 — does the amount asked for add up?**")
+    lines.append(str(current) + " + " + str(other) + " + " + str(previous)
+                 + " = " + str(round(current + other + previous, 2))
                  + ". Bill asks for " + str(payable) + ".")
-    if abs((current + previous) - payable) < 1:
+    if abs((current + other + previous) - payable) < 1:
         lines.append("Correct.")
     else:
         lines.append("These do not match.")
 
     contact_lines = ["### Who to contact", ""]
     for c in data.get("contacts", []):
-        contact_lines.append("- **" + str(c.get("name")) + "** — " + str(c.get("email")))
+        email = str(c.get("email") or "")
+        if "*" in email or email == "":
+            continue
+        contact_lines.append("- **" + str(c.get("name")) + "** — " + email)
 
     return "\n".join(lines), "\n".join(contact_lines), ""
 

@@ -3,7 +3,9 @@ import json
 import gradio as gr
 from pypdf import PdfReader
 from groq import Groq
+from supabase import create_client
 
+db = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 INSTRUCTIONS = """You read utility and telecom bills.
@@ -84,6 +86,45 @@ def write_message(facts):
     )
     return response.choices[0].message.content
 
+def save_everything(data, summary, message, charges_total):
+    bill_row = db.table("bills").insert({
+        "company": data.get("company"),
+        "bill_date": data.get("bill_date"),
+        "current_total": data.get("current_total"),
+        "other_charges": data.get("other_charges"),
+        "previous_unpaid": data.get("previous_unpaid"),
+        "amount_payable": data.get("amount_payable"),
+        "summary": summary,
+        "raw_json": data,
+    }).execute()
+
+    bill_id = bill_row.data[0]["id"]
+
+    biggest_id = None
+    biggest_amount = 0
+
+    for charge in data.get("charges", []):
+        label = str(charge.get("label") or "")
+        amount = charge.get("amount") or 0
+        row = db.table("line_items").insert({
+            "bill_id": bill_id,
+            "label": label,
+            "normalised_label": label.lower().replace(" ", ""),
+            "amount": amount,
+            "units": charge.get("units"),
+            "rate": charge.get("rate"),
+            "checked": "checked",
+        }).execute()
+        if abs(amount) > biggest_amount:
+            biggest_amount = abs(amount)
+            biggest_id = row.data[0]["id"]
+
+    db.table("messages").insert({
+        "bill_id": bill_id,
+        "line_item_id": biggest_id,
+        "text": message,
+    }).execute()
+
 def check_bill(file, complaint):
     if file is None:
         return "Please upload a PDF bill first.", "", ""
@@ -148,7 +189,8 @@ def check_bill(file, complaint):
     facts = facts + "\nWhat the customer says is bothering them: " + str(complaint)
 
     message = write_message(facts)
-
+    save_everything(data, "\n".join(lines), message, total_of_lines)
+  
     return "\n".join(lines), "\n".join(contact_lines), message
 
 

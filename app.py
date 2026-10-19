@@ -1,3 +1,4 @@
+import os
 import gradio as gr
 
 def check_bill(file, complaint):

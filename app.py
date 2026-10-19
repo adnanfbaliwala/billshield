@@ -32,13 +32,14 @@ per unit. Put the rate per unit in "rate" and the number of units
 in "units".
 Credits, discounts and rebates are NEGATIVE numbers.
 "charges" holds only the lines that make up the current month's total.
+Never include subtotal, running total or "total of the above" lines
+in "charges". Only list the individual charges.
 Late fees, interest and adjustments shown separately go in
 "other_charges" as a single number, 0 if there are none.
 "contacts" holds only the company's own helpline, grievance,
 consumer forum or ombudsman addresses. Never the customer's own
 email. Never an address containing asterisks.
 If a value is not on the bill, use null."""
-
 
 def read_pdf(path):
     reader = PdfReader(path)
@@ -59,6 +60,27 @@ def ask_groq(bill_text):
     )
     return json.loads(response.choices[0].message.content)
 
+MESSAGE_RULES = """You write short, polite complaint emails about
+bills, in the customer's voice. The bill may be for electricity,
+broadband, mobile, a credit card or anything else.
+
+Use ONLY the figures given to you. Never state a number that is
+not in the facts below. Never calculate anything.
+Do not invent an error. If the arithmetic checks out, say so and
+ask about what the customer is actually worried about.
+Always end by asking for a complaint reference number.
+Keep it under 150 words. No greeting line with a name. Plain text."""
+
+
+def write_message(facts):
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {"role": "system", "content": MESSAGE_RULES},
+            {"role": "user", "content": facts},
+        ],
+    )
+    return response.choices[0].message.content
 
 def check_bill(file, complaint):
     if file is None:
@@ -85,6 +107,9 @@ def check_bill(file, complaint):
     previous = data.get("previous_unpaid") or 0
     payable = data.get("amount_payable") or 0
 
+    mismatch = ("These do not match. This may be a reading problem rather "
+                "than a billing error — check the printed bill.")
+
     lines.append("")
     lines.append("**Check 1 — do the charges add up to the month's total?**")
     lines.append("Charges add to " + str(round(total_of_lines, 2))
@@ -92,7 +117,7 @@ def check_bill(file, complaint):
     if abs(total_of_lines - current) < 1:
         lines.append("Correct.")
     else:
-        lines.append("These do not match.")
+        lines.append(mismatch)
 
     lines.append("")
     lines.append("**Check 2 — does the amount asked for add up?**")
@@ -102,7 +127,7 @@ def check_bill(file, complaint):
     if abs((current + other + previous) - payable) < 1:
         lines.append("Correct.")
     else:
-        lines.append("These do not match.")
+        lines.append(mismatch)
 
     contact_lines = ["### Who to contact", ""]
     for c in data.get("contacts", []):
@@ -111,7 +136,18 @@ def check_bill(file, complaint):
             continue
         contact_lines.append("- **" + str(c.get("name")) + "** — " + email)
 
-    return "\n".join(lines), "\n".join(contact_lines), ""
+    facts = "Company: " + str(data.get("company"))
+    facts = facts + "\nBill month: " + str(data.get("bill_date"))
+    facts = facts + "\nCharges this month: " + str(current)
+    facts = facts + "\nLate fees or adjustments: " + str(other)
+    facts = facts + "\nUnpaid from earlier months: " + str(previous)
+    facts = facts + "\nTotal amount demanded: " + str(payable)
+    facts = facts + "\nOur own check of the charges came to: " + str(round(total_of_lines, 2))
+    facts = facts + "\nWhat the customer says is bothering them: " + str(complaint)
+
+    message = write_message(facts)
+
+    return "\n".join(lines), "\n".join(contact_lines), message
 
 
 with gr.Blocks(title="BillShield") as app:
@@ -126,7 +162,8 @@ with gr.Blocks(title="BillShield") as app:
 
     found = gr.Markdown(label="3. What we found")
     contacts = gr.Markdown(label="4. Who to contact")
-    msg = gr.Textbox(label="5. Your complaint", lines=10, interactive=True)
+    msg = gr.Textbox(label="5. Your complaint", lines=10,
+                     interactive=True, show_copy_button=True)
 
     btn.click(check_bill, [bill, complaint], [found, contacts, msg])
 

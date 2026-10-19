@@ -69,6 +69,8 @@ not in the facts below. Never calculate anything.
 Do not invent an error. If the arithmetic checks out, say so and
 ask about what the customer is actually worried about.
 Always end by asking for a complaint reference number.
+All amounts are Indian rupees. Write them as Rs. 2,386.80 — never
+use a euro, dollar or pound sign.
 Keep it under 150 words. No greeting line with a name. Plain text."""
 
 

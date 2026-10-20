@@ -229,23 +229,19 @@ def check_bill(file, complaint):
 
 
 with gr.Blocks(title="BillShield") as app:
-        gr.Markdown("# BillShield\nFind out what each charge really is "
-                "— and get a message you can send")
+    gr.Markdown("# BillShield\nFind out what each charge really is — and get a message you can send")
 
-    bill = gr.File(label="1. Upload your bill (PDF only)",
-                   file_types=[".pdf"], type="filepath")
-    complaint = gr.Textbox(label="2. What's bothering you about it?",
-                           placeholder="Feels too high. I live alone, no AC.",
-                           lines=3)
+    bill = gr.File(label="1. Upload your bill (PDF only)", file_types=[".pdf"], type="filepath")
+
+    complaint = gr.Textbox(label="2. What's bothering you about it?", placeholder="Feels too high. I live alone, no AC.", lines=3)
+
     btn = gr.Button("Check my bill", variant="primary")
 
     found = gr.Markdown(label="3. What we found")
+
     contacts = gr.Markdown(label="4. Who to contact")
-    msg = gr.Textbox(
-        label="5. Your message — edit it or just copy and send",
-        lines=10,
-        interactive=True,
-    )
+
+    msg = gr.Textbox(label="5. Your message — edit it or just copy and send", lines=10, interactive=True)
 
     btn.click(check_bill, [bill, complaint], [found, contacts, msg])
 

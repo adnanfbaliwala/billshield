@@ -238,4 +238,9 @@ with gr.Blocks(title="BillShield") as app:
 
     btn.click(check_bill, [bill, complaint], [found, contacts, msg])
 
+    def reset_outputs(file):
+        return "", "", ""
+
+    bill.change(reset_outputs, bill, [found, contacts, msg])
+
 app.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))

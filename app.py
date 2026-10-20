@@ -32,10 +32,12 @@ Copy every number exactly as printed. Never calculate anything.
 "amount" is the rupee figure in the amount column, never the rate
 per unit. Put the rate per unit in "rate" and the number of units
 in "units".
-Credits, discounts and rebates are NEGATIVE numbers.
+Credits, discounts, payments and rebates are NEGATIVE numbers.
 "charges" holds only the lines that make up the current month's total.
 Never include subtotal, running total or "total of the above" lines
 in "charges". Only list the individual charges.
+If the previous balance already appears as a line inside "charges",
+set "previous_unpaid" to 0 so it is not counted twice.
 Late fees, interest and adjustments shown separately go in
 "other_charges" as a single number, 0 if there are none.
 "contacts" holds only the company's own helpline, grievance,
@@ -81,6 +83,23 @@ def write_message(facts):
         model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": MESSAGE_RULES},
+            {"role": "user", "content": facts},
+        ],
+    )
+    return response.choices[0].message.content
+
+EXPLAIN_RULES = """You explain bills in plain English, in three
+sentences or less. Use ONLY the figures given. Never calculate.
+If the person asked a question, answer it directly from the bill.
+If the bill does not say, say that it does not say.
+Amounts are Indian rupees, written as Rs. 200."""
+
+
+def explain(facts):
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {"role": "system", "content": EXPLAIN_RULES},
             {"role": "user", "content": facts},
         ],
     )
@@ -154,7 +173,7 @@ def check_bill(file, complaint):
                 "than a billing error — check the printed bill.")
 
     lines.append("")
-    lines.append("**Check 1 — do the charges add up to the month's total?**")
+    lines.append("**Do the charges add up to what they say this month costs?**")
     lines.append("Charges add to " + str(round(total_of_lines, 2))
                  + ". Bill says " + str(current) + ".")
     if abs(total_of_lines - current) < 1:
@@ -163,7 +182,7 @@ def check_bill(file, complaint):
         lines.append(mismatch)
 
     lines.append("")
-    lines.append("**Check 2 — does the amount asked for add up?**")
+    lines.append("**Does the total they are asking for add up?**")
     lines.append(str(current) + " + " + str(other) + " + " + str(previous)
                  + " = " + str(round(current + other + previous, 2))
                  + ". Bill asks for " + str(payable) + ".")
@@ -179,6 +198,11 @@ def check_bill(file, complaint):
             continue
         contact_lines.append("- **" + str(c.get("name")) + "** — " + email)
 
+    if len(contact_lines) == 2:
+        contact_lines.append("This bill does not print a complaint address. "
+                             "Check the company's website or the back of the "
+                             "statement, then paste it into your email.")
+
     facts = "Company: " + str(data.get("company"))
     facts = facts + "\nBill month: " + str(data.get("bill_date"))
     facts = facts + "\nCharges this month: " + str(current)
@@ -188,9 +212,13 @@ def check_bill(file, complaint):
     facts = facts + "\nOur own check of the charges came to: " + str(round(total_of_lines, 2))
     facts = facts + "\nWhat the customer says is bothering them: " + str(complaint)
 
+    summary = explain(facts)
+    lines.insert(1, summary)
+    lines.insert(2, "")
+
     message = write_message(facts)
     save_everything(data, "\n".join(lines), message, total_of_lines)
-  
+
     return "\n".join(lines), "\n".join(contact_lines), message
 
 

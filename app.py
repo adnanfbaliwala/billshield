@@ -144,6 +144,12 @@ def save_everything(data, summary, message, charges_total):
         "text": message,
     }).execute()
 
+def term(n):
+    n = round(n, 2)
+    if n < 0:
+        return " - " + str(abs(n))
+    return " + " + str(n)
+  
 def check_bill(file, complaint):
     if file is None:
         return "Please upload a PDF bill first.", "", ""
@@ -234,8 +240,11 @@ with gr.Blocks(title="BillShield") as app:
 
     found = gr.Markdown(label="3. What we found")
     contacts = gr.Markdown(label="4. Who to contact")
-        msg = gr.Textbox(label="5. Your message to the company — edit it or just copy and send",
-                     lines=10, interactive=True)
+    msg = gr.Textbox(
+        label="5. Your message to the company — edit it or just copy and send",
+        lines=10,
+        interactive=True,
+    )
 
     btn.click(check_bill, [bill, complaint], [found, contacts, msg])
 

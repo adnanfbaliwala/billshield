@@ -189,7 +189,7 @@ def check_bill(file, complaint):
 
     lines.append("")
     lines.append("**Does the total they are asking for add up?**")
-    lines.append(str(current) + " + " + str(other) + " + " + str(previous)
+    lines.append(str(current) + term(other) + term(previous)
                  + " = " + str(round(current + other + previous, 2))
                  + ". Bill asks for " + str(payable) + ".")
     if abs((current + other + previous) - payable) < 1:

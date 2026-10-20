@@ -4,6 +4,7 @@ import gradio as gr
 from pypdf import PdfReader
 from groq import Groq
 from supabase import create_client
+from datetime import datetime, timezone
 
 db = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 client = Groq(api_key=os.environ["GROQ_API_KEY"])
@@ -138,11 +139,13 @@ def save_everything(data, summary, message, charges_total):
             biggest_amount = abs(amount)
             biggest_id = row.data[0]["id"]
 
-    db.table("messages").insert({
+    msg_row = db.table("messages").insert({
         "bill_id": bill_id,
         "line_item_id": biggest_id,
         "text": message,
     }).execute()
+
+    return msg_row.data[0]["id"]
 
 def term(n):
     n = round(n, 2)
@@ -152,11 +155,11 @@ def term(n):
   
 def check_bill(file, complaint):
     if file is None:
-        return "Please upload a PDF bill first.", "", ""
+          return "Please upload a PDF bill first.", "", "", None, ""
 
     text = read_pdf(file)
     if text.strip() == "":
-        return "This PDF has no readable text. It may be a scan.", "", ""
+          return "This PDF has no readable text. It may be a scan.", "", "", None, ""
 
     data = ask_groq(text)
 
@@ -223,10 +226,27 @@ def check_bill(file, complaint):
     lines.insert(2, "")
 
     message = write_message(facts)
-    save_everything(data, "\n".join(lines), message, total_of_lines)
+    message_id = save_everything(data, "\n".join(lines), message, total_of_lines)
 
-    return "\n".join(lines), "\n".join(contact_lines), message
+    return "\n".join(lines), "\n".join(contact_lines), message, message_id, message
 
+def mark_sent(message_id, original, current):
+    if message_id is None:
+        return "Check a bill first."
+
+    old_words = str(original or "").split()
+    new_words = str(current or "").split()
+    changed = abs(len(old_words) - len(new_words))
+    for a, b in zip(old_words, new_words):
+        if a != b:
+            changed = changed + 1
+
+    db.table("messages").update({
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "words_changed": changed,
+    }).eq("id", message_id).execute()
+
+    return "Recorded. " + str(changed) + " words changed."
 
 with gr.Blocks(title="BillShield") as app:
     gr.Markdown("# BillShield\nFind out what each charge really is — and get a message you can send")
@@ -243,11 +263,21 @@ with gr.Blocks(title="BillShield") as app:
 
     msg = gr.Textbox(label="5. Your message — edit it or just copy and send", lines=10, interactive=True)
 
-    btn.click(check_bill, [bill, complaint], [found, contacts, msg])
+    sent_btn = gr.Button("I've sent this")
+
+    sent_note = gr.Markdown()
+
+    message_id = gr.State()
+
+    original = gr.State()
+
+    btn.click(check_bill, [bill, complaint], [found, contacts, msg, message_id, original])
+
+    sent_btn.click(mark_sent, [message_id, original, msg], sent_note)
 
     def reset_outputs(file):
-        return "", "", "", ""
+        return "", "", "", "", ""
 
-    bill.change(reset_outputs, bill, [found, contacts, msg, complaint])
+    bill.change(reset_outputs, bill, [found, contacts, msg, complaint, sent_note])
 
 app.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))

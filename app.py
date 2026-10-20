@@ -263,7 +263,7 @@ with gr.Blocks(title="BillShield") as app:
 
     msg = gr.Textbox(label="5. Your message — edit it or just copy and send", lines=10, interactive=True)
 
-    sent_btn = gr.Button("I've sent this")
+    sent_btn = gr.Button("Done, I’ve sent this")
 
     sent_note = gr.Markdown()
 

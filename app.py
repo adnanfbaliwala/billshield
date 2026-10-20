@@ -234,13 +234,14 @@ with gr.Blocks(title="BillShield") as app:
 
     found = gr.Markdown(label="3. What we found")
     contacts = gr.Markdown(label="4. Who to contact")
-    msg = gr.Textbox(label="5. Your complaint", lines=10, interactive=True)
+        msg = gr.Textbox(label="5. Your message to the company — edit it or just copy and send",
+                     lines=10, interactive=True)
 
     btn.click(check_bill, [bill, complaint], [found, contacts, msg])
 
     def reset_outputs(file):
-        return "", "", ""
+        return "", "", "", ""
 
-    bill.change(reset_outputs, bill, [found, contacts, msg])
+    bill.change(reset_outputs, bill, [found, contacts, msg, complaint])
 
 app.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 7860)))
